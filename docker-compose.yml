@@ -1,0 +1,127 @@
+services:
+  # 1) Spring Cloud Config Server: sirve los *.yml desde tu hsys-config-repo
+  config-service:
+    # OPCIÓN A: usa una imagen ya publicada en tu registry
+    image: andrewscl/config-service:latest
+    # OPCIÓN B: construye localmente desde el código fuente
+    # build: ./config-service
+    container_name: config-service
+    ports:
+      - "8888:8888"
+    environment:
+      # Si tu config-service NO tiene application.yml embebido, o quieres forzarlo por env:
+      - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=https://github.com/andrewscl/hsys-config-repo.git
+      - SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL=main
+      - SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START=true
+      # Exponer actuator básico (opcional)
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,env
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8888/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # 2) API Gateway: entrada única al sistema (enruta a auth y user)
+  gateway-service:
+    image: andrewscl/gateway-service:latest
+    # build: ./gateway-service
+    container_name: gateway-service
+    depends_on:
+      config-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    environment:
+      # Hace que el Gateway lea su config desde el Config Server
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-service:8888
+      # Debe coincidir con gateway-service.yml en tu hsys-config-repo
+      - SPRING_APPLICATION_NAME=gateway-service
+      # (Opcional) Logs más verbosos al principio
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY=DEBUG
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # 3) Auth service (JWT)
+  auth-service:
+    image: andrewscl/auth-service:latest
+    # build: ./auth-service
+    container_name: auth-service
+    depends_on:
+      config-service:
+        condition: service_healthy
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-service:8888
+      - SPRING_APPLICATION_NAME=auth-service
+      # Secretos por variable de entorno (NO en el repo de config)
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=3600000
+      # (Opcional) Exponer actuator
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # 4) User Service (DB)
+  user-service:
+    image: andrewscl/user-service:latest
+    # build: ./user-service
+    container_name: user-service
+    depends_on:
+      config-service:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-service:8888
+      - SPRING_APPLICATION_NAME=user-service
+      # Con Compose, el hostname del DB es el nombre del servicio: "postgres"
+      - DB_URL=jdbc:postgresql://postgres:5432/userdb
+      - DB_USER=postgres
+      - DB_PASS=${POSTGRES_PASS}
+      # (Opcional) Exponer actuator
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # 5) Base de datos Postgres
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=userdb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"  # acceso desde tu host (p.ej., DBeaver) sin chocar con un Postgres local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d userdb"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  pgdata:
