@@ -16,11 +16,6 @@ services:
       # Exponer actuator básico (opcional)
       - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,env
       - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8888/actuator/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
     restart: unless-stopped
 
   # 2) API Gateway: entrada única al sistema (enruta a auth y user)
@@ -29,12 +24,11 @@ services:
     # build: ./gateway-service
     container_name: gateway-service
     depends_on:
-      config-service:
-        condition: service_healthy
-      auth-service:
-        condition: service_healthy
-      user-service:
-        condition: service_healthy
+      - config-service
+      - auth-service
+      - user-service
+      - public-service
+
     environment:
       # Hace que el Gateway lea su config desde el Config Server
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-service:8888
@@ -44,11 +38,6 @@ services:
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY=DEBUG
     ports:
       - "8080:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 20
     restart: unless-stopped
 
   # 3) Auth service (JWT)
@@ -69,11 +58,6 @@ services:
       - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
     ports:
       - "8081:8081"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 20
     restart: unless-stopped
 
   # 4) User Service (DB)
@@ -97,11 +81,6 @@ services:
       - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
     ports:
       - "8082:8082"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
-      interval: 10s
-      timeout: 3s
-      retries: 20
     restart: unless-stopped
 
   # 5) Base de datos Postgres
@@ -116,11 +95,19 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5434:5432"  # acceso desde tu host (p.ej., DBeaver) sin chocar con un Postgres local
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d userdb"]
-      interval: 10s
-      timeout: 3s
-      retries: 20
+    restart: unless-stopped
+
+  public-service:
+    image: andrewscl/public-service:latest
+    container_name: public-service
+    depends_on:
+      config-service:
+        condition: service_healthy
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-service:8888
+      - SPRING_APPLICATION_NAME=public-service
+    ports:
+      - "8083:8083"   # opcional, para probar directo sin pasar por el gateway
     restart: unless-stopped
 
 volumes:
