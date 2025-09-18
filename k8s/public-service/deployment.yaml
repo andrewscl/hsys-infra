@@ -13,8 +13,8 @@ spec:
     spec:
       containers:
         - name: public
-          image: andrewscl/public-service:latest   # tu imagen
-          ports: [ { containerPort: 8888 } ]
+          image: andrewscl/public-service:0.0.1
+          ports: [ { containerPort: 8080 } ]
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: default
