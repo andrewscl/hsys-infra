@@ -1,0 +1,55 @@
+replicaCount: 1
+
+image:
+  repository: andrewscl/gateway-service
+  tag: "0.0.1"
+  pullPolicy: IfNotPresent
+
+# Expón el gateway al exterior:
+service:
+  # Opción 1: LoadBalancer (preferido en cloud)
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
+  # Opción 2: Si NO tienes LB, usa:
+  # type: NodePort
+  # port: 80
+  # targetPort: 8080
+  # nodePort: 30080   # fija si quieres un puerto estable
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "default"
+  - name: SPRING_CONFIG_IMPORT
+    value: "optional:configserver:http://config-service:8888"
+
+readinessProbe:
+  path: /actuator/health
+  port: 8080
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 6
+
+livenessProbe:
+  enabled: true
+  path: /actuator/health
+  port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+podLabels:
+  app: gateway-service
+
+# Variables secretas si necesitas (JWT, etc.)
+secretEnv: []

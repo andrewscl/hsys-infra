@@ -1,0 +1,50 @@
+replicaCount: 1
+
+image:
+  repository: andrewscl/config-service
+  tag: "0.0.1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8888
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Env no secretas para el container
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "default"
+  # JVM opcional para controlar memoria:
+  - name: JAVA_TOOL_OPTIONS
+    value: "-XX:MaxRAMPercentage=60 -Xms64m -Xmx256m"
+
+readinessProbe:
+  path: /actuator/health
+  port: 8888
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+livenessProbe:
+  path: /actuator/health
+  port: 8888
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+podLabels:
+  app: config-service
+
+# Si tu repo de config fuera privado, aquí referenciarías secrets (token/ssh)
+secretEnv: []
+# - name: GIT_USERNAME
+#   secretName: config-git-cred
+#   secretKey: username
+# - name: GIT_PASSWORD
+#   secretName: config-git-cred
+#   secretKey: password

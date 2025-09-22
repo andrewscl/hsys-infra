@@ -1,0 +1,53 @@
+replicaCount: 1
+
+image:
+  repository: andrewscl/public-service
+  tag: "0.0.1"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080   # si tu app realmente usa 8083, cambia aquí y en probes
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Variables de entorno no secretas
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: "default"
+  # Si usas Config Server, puedes agregar:
+  # - name: SPRING_CONFIG_IMPORT
+  #   value: "optional:configserver:http://config-service:8888"
+
+# Variables de entorno provenientes de Secrets
+secretEnv: []
+# Ejemplo para Postgres:
+# secretEnv:
+#   - name: HSYS_POSTGRES_PASS
+#     secretName: postgres-credentials
+#     secretKey: password
+
+readinessProbe:
+  path: /actuator/health
+  port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+livenessProbe:
+  path: /actuator/health
+  port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+serviceAccount:
+  create: false   # no crear ServiceAccount (usa el default)
+  name: ""
+  
+ingress:
+  enabled: false       # o un nombre si quieres uno propio
